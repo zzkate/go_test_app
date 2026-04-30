@@ -1,0 +1,31 @@
+# Stage 1: Build
+# === Этап 1: Сборка (Builder) ===
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /app
+
+# Шаг 1: Кэшируем зависимости
+# Этот слой пересоберется ТОЛЬКО если изменились go.mod или go.sum
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Шаг 2: Копируем код
+COPY . .
+
+# Шаг 3: Собираем бинарник
+# CGO_ENABLED=0 - критически важно для статической линковки
+# -ldflags="-w -s" - вырезаем отладочную информацию
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/service ./app/main.go
+
+# === Этап 2: Финальный образ (Runner) ===
+FROM alpine:latest
+WORKDIR /app
+
+# Забираем только готовый бинарник из первого этапа
+COPY --from=builder /app/bin/service ./service
+
+# Контейнер будет работать от непривилегированного пользователя
+USER nonroot:nonroot
+
+EXPOSE 8080
+CMD ["./service"]
