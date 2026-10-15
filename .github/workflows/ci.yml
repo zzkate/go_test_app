@@ -60,7 +60,7 @@ jobs:
         run: docker compose down -v
 
   bench:
-    name: Бенчмарки
+    name: Бенчмарки + pprof
     runs-on: ubuntu-latest
     needs: test
     defaults:
@@ -76,11 +76,25 @@ jobs:
           go-version-file: go_test_app/go.mod
           cache-dependency-path: go_test_app/go.sum
 
-      - name: Запуск бенчмарков
-        run: go test -run '^$' -bench . -benchmem -count=1 -timeout 5m ./app | tee bench.txt
+      - name: Бенчмарки с профилями
+        run: |
+          go test -run '^$' -bench . -benchmem -count=1 -timeout 5m \
+            -cpuprofile=cpu.out -memprofile=mem.out ./app | tee bench.txt
 
-      - name: Сохранить результаты
+      - name: "pprof CPU (top)"
+        run: go tool pprof -top -nodecount=20 cpu.out | tee cpu-top.txt
+
+      - name: "pprof память (top, alloc_space)"
+        run: go tool pprof -top -nodecount=20 -sample_index=alloc_space mem.out | tee mem-top.txt
+
+      - name: Сохранить результаты и профили
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmarks
-          path: go_test_app/bench.txt
+          path: |
+            go_test_app/bench.txt
+            go_test_app/cpu.out
+            go_test_app/mem.out
+            go_test_app/cpu-top.txt
+            go_test_app/mem-top.txt
