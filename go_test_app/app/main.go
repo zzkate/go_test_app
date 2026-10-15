@@ -18,20 +18,19 @@ type QueueMessage struct {
 
 // Ожидание получателя
 type Waiter struct {
-	Ch   chan *QueueMessage
-	Stop chan struct{} // для прерывания по таймауту
+	Ch chan *QueueMessage
 }
 
 // Очередь сообщений + очередь ожидающих получателей
 type Queue struct {
-	mutex    sync.Mutex
-	items  []*QueueMessage
+	mutex   sync.Mutex
+	items   []*QueueMessage
 	waiters []*Waiter
 }
 
 func NewQueue() *Queue {
 	return &Queue{
-		items:  []*QueueMessage{},
+		items:   []*QueueMessage{},
 		waiters: []*Waiter{},
 	}
 }
@@ -60,28 +59,31 @@ func (q *Queue) WaitForNext(timeout time.Duration) *QueueMessage {
 	}
 
 	ch := make(chan *QueueMessage, 1)
-	stop := make(chan struct{})
-	waiter := &Waiter{Ch: ch, Stop: stop}
+	waiter := &Waiter{Ch: ch}
 	q.waiters = append(q.waiters, waiter)
 	q.mutex.Unlock()
-
-	defer func() {
-		close(stop)
-	}()
 
 	select {
 	case msg := <-ch:
 		return msg
 	case <-time.After(timeout):
 		q.mutex.Lock()
-		// Удаляем себя из waiters, если ещё не разобрали
+		// Убираем себя из waiters, если Push ещё не забрал нас.
+		found := false
 		for i, w := range q.waiters {
 			if w == waiter {
 				q.waiters = append(q.waiters[:i], q.waiters[i+1:]...)
+				found = true
 				break
 			}
 		}
 		q.mutex.Unlock()
+
+		if !found {
+			// Push уже забрал этого waiter и положил сообщение в буфер ch.
+			// Не теряем его — забираем из канала.
+			return <-ch
+		}
 		return nil
 	}
 }
