@@ -25,7 +25,12 @@ WORKDIR /app
 COPY --from=builder /app/bin/service ./service
 
 # Контейнер будет работать от непривилегированного пользователя
-USER nonroot:nonroot
+# (в базовом alpine нет готового пользователя nonroot — создаём свой)
+RUN addgroup -S app && adduser -S -G app app
+
+USER app
 
 EXPOSE 8080
-CMD ["./service"]
+
+# Приложение принимает номер порта аргументом командной строки
+CMD ["./service", "8080"]
