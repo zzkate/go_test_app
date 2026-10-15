@@ -58,3 +58,29 @@ jobs:
       - name: Остановить сервис
         if: always()
         run: docker compose down -v
+
+  bench:
+    name: Бенчмарки
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: go_test_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go_test_app/go.mod
+          cache-dependency-path: go_test_app/go.sum
+
+      - name: Запуск бенчмарков
+        run: go test -run '^$' -bench . -benchmem -count=1 -timeout 5m ./app | tee bench.txt
+
+      - name: Сохранить результаты
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks
+          path: go_test_app/bench.txt
