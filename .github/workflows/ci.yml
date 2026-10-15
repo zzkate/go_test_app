@@ -34,8 +34,8 @@ jobs:
       - name: Тесты с детектором гонок
         run: go test -race -count=1 -v ./...
 
-  docker:
-    name: Сборка Docker-образа
+  e2e:
+    name: E2E (Docker + curl)
     runs-on: ubuntu-latest
     needs: test
     defaults:
@@ -45,5 +45,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Сборка через docker compose
-        run: docker compose build
+      - name: Поднять сервис в Docker
+        run: docker compose up -d --build
+
+      - name: curl-тесты
+        run: bash scripts/curl_tests.sh http://127.0.0.1:8080
+
+      - name: Логи контейнера при падении
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Остановить сервис
+        if: always()
+        run: docker compose down -v
