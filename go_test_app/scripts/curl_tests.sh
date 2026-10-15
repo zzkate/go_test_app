@@ -175,6 +175,14 @@ else
 	fail "потеря/дубликаты: уникальных ${#seen[@]} из $N, дубликатов $dups, остаток HTTP $leftover"
 fi
 
+echo "--- Метрики /metrics ---"
+metrics_code=$(curl -sS -o "$TMP/metrics" -w '%{http_code}' "$BASE_URL/metrics")
+if [[ "$metrics_code" == "200" ]] && grep -q '^queue_put_total ' "$TMP/metrics" && grep -q '^queue_depth{' "$TMP/metrics"; then
+	pass "/metrics отдаёт Prometheus-формат (queue_put_total, queue_depth)"
+else
+	fail "/metrics: HTTP $metrics_code, ожидался 200 с queue_put_total/queue_depth"
+fi
+
 echo
 if [[ $FAILS -eq 0 ]]; then
 	echo "Все проверки прошли."

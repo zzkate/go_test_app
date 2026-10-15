@@ -99,6 +99,7 @@ func (q *Queue) WaitForNext(timeout time.Duration) *QueueMessage {
 			// Не теряем его — забираем из канала.
 			return <-ch
 		}
+		waitTimeoutTotal.Add(1)
 		return nil
 	}
 }
@@ -159,6 +160,7 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	qMutex.Unlock()
 
 	q.Push(&QueueMessage{Value: v})
+	putTotal.Add(1)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -201,9 +203,11 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 
 	msg := q.WaitForNext(to)
 	if msg == nil {
+		getMissTotal.Add(1)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	getTotal.Add(1)
 
 	_, _ = w.Write([]byte(msg.Value))
 }
@@ -216,6 +220,11 @@ func main() {
 	port := os.Args[1]
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" {
+			metricsHandler(w, r)
+			return
+		}
+
 		path := r.URL.Path
 		if strings.HasPrefix(path, "/") && path != "/" && !strings.HasPrefix(path, "/favicon.ico") {
 			qname := path[1:]
