@@ -59,6 +59,68 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  metrics:
+    name: Метрики (Prometheus/Grafana)
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: go_test_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go_test_app/go.mod
+          cache-dependency-path: go_test_app/go.sum
+
+      - name: Собрать и запустить сервис
+        run: |
+          go build -o /tmp/queue-service ./app
+          /tmp/queue-service 8080 >/tmp/queue-service.log 2>&1 &
+          echo $! >/tmp/queue-service.pid
+
+      - name: Дождаться готовности
+        run: |
+          for i in $(seq 1 50); do
+            if curl -s -o /dev/null http://127.0.0.1:8080/ping; then exit 0; fi
+            sleep 0.2
+          done
+          echo "сервис не поднялся"; cat /tmp/queue-service.log; exit 1
+
+      - name: Снять и проверить /metrics
+        run: |
+          curl -fsS -X PUT 'http://127.0.0.1:8080/metrics-check?v=hello'
+          curl -fsS http://127.0.0.1:8080/metrics | tee metrics.txt
+          grep -Eq '^queue_put_total [0-9]+' metrics.txt
+          grep -Eq '^queue_get_total [0-9]+' metrics.txt
+          grep -Eq '^queue_depth\{queue="metrics-check"\} 1' metrics.txt
+          grep -Eq '^queue_waiters\{queue="metrics-check"\} 0' metrics.txt
+
+      - name: Проверить конфиг Prometheus (promtool)
+        run: |
+          docker run --rm -v "$PWD/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            prom/prometheus:latest promtool check config /etc/prometheus/prometheus.yml
+
+      - name: Проверить дашборд Grafana (JSON)
+        run: python3 -c "import json; d=json.load(open('grafana/dashboards/queue.json')); assert d['panels'], 'нет панелей'; print('dashboard ok:', len(d['panels']), 'panels')"
+
+      - name: Проверить docker compose
+        run: docker compose config >/dev/null && echo "compose ok"
+
+      - name: Сохранить metrics.txt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics
+          path: go_test_app/metrics.txt
+
+      - name: Остановить сервис
+        if: always()
+        run: kill "$(cat /tmp/queue-service.pid)" 2>/dev/null || true
+
   bench:
     name: Бенчмарки + pprof
     runs-on: ubuntu-latest

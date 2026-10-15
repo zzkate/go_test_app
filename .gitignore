@@ -4,6 +4,7 @@
 
 # Benchmark и профили (создаются локально и в CI)
 bench.txt
+metrics.txt
 *-top.txt
 
 # Локально собранный бинарник (go build без -o в каталоге app)
