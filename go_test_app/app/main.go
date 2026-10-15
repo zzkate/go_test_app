@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -38,8 +39,6 @@ func NewQueue() *Queue {
 
 func (q *Queue) Push(msg *QueueMessage) {
 	q.mutex.Lock()
-	defer q.mutex.Unlock()
-
 	if len(q.waiters) > 0 {
 		// Есть ожидающие — сразу отдаём первому
 		waiter := q.waiters[0]
@@ -48,6 +47,7 @@ func (q *Queue) Push(msg *QueueMessage) {
 	} else {
 		q.items = append(q.items, msg)
 	}
+	q.mutex.Unlock()
 }
 
 func (q *Queue) WaitForNext(timeout time.Duration) *QueueMessage {
@@ -109,6 +109,29 @@ var (
 	queues = map[string]*Queue{} // map[queueName] *Queue
 )
 
+// queryGet достаёт значение параметра из RawQuery, не строя map целиком,
+// как это делает r.URL.Query() (по профилю — главный источник аллокаций).
+// QueryUnescape не аллоцирует, если в строке нет % и +.
+func queryGet(rawQuery, key string) string {
+	for rawQuery != "" {
+		var pair string
+		if i := strings.IndexByte(rawQuery, '&'); i >= 0 {
+			pair, rawQuery = rawQuery[:i], rawQuery[i+1:]
+		} else {
+			pair, rawQuery = rawQuery, ""
+		}
+
+		k, v, _ := strings.Cut(pair, "=")
+		if k, err := url.QueryUnescape(k); err == nil && k == key {
+			if v, err := url.QueryUnescape(v); err == nil {
+				return v
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
 func putHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -121,7 +144,7 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v := r.URL.Query().Get("v")
+	v := queryGet(r.URL.RawQuery, "v")
 	if v == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -153,7 +176,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timeout := 0.0
-	timeoutStr := r.URL.Query().Get("timeout")
+	timeoutStr := queryGet(r.URL.RawQuery, "timeout")
 	if timeoutStr != "" {
 		t, err := strconv.ParseFloat(timeoutStr, 64)
 		if err != nil || t < 0 {

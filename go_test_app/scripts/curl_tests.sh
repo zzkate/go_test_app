@@ -106,6 +106,10 @@ check "GET /$ROLE (1-й -> manager)" 200 "manager" "$BASE_URL/$ROLE"
 check "GET /$ROLE (2-й -> executive)" 200 "executive" "$BASE_URL/$ROLE"
 check "GET /$ROLE (пусто -> 404)" 404 "" "$BASE_URL/$ROLE"
 
+echo "--- URL-encoded значение ---"
+check "PUT /$PET?v=hello%20world" 200 "" -X PUT "$BASE_URL/$PET?v=hello%20world"
+check "GET декодирует значение" 200 "hello world" "$BASE_URL/$PET"
+
 echo "--- Ошибки ---"
 check "PUT без v (400)" 400 "" -X PUT "$BASE_URL/$PET"
 check "GET ?timeout=1 на пустой (404)" 404 "" "$BASE_URL/$PET?timeout=1"

@@ -1,0 +1,10 @@
+# Go test/build artifacts
+*.test
+*.out
+
+# Benchmark и профили (создаются локально и в CI)
+bench.txt
+*-top.txt
+
+# Локально собранный бинарник (go build без -o в каталоге app)
+/go_test_app/app/app
