@@ -101,8 +101,9 @@ jobs:
 
       - name: Проверить конфиг Prometheus (promtool)
         run: |
-          docker run --rm -v "$PWD/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
-            prom/prometheus:latest promtool check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            prom/prometheus:latest check config /etc/prometheus/prometheus.yml
 
       - name: Проверить дашборд Grafana (JSON)
         run: python3 -c "import json; d=json.load(open('grafana/dashboards/queue.json')); assert d['panels'], 'нет панелей'; print('dashboard ok:', len(d['panels']), 'panels')"
