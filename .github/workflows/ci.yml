@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Тесты (go test -race)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go_test_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go_test_app/go.mod
+          cache-dependency-path: go_test_app/go.sum
+
+      - name: Проверка форматирования
+        run: test -z "$(gofmt -l .)"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Тесты с детектором гонок
+        run: go test -race -count=1 -v ./...
+
+  docker:
+    name: Сборка Docker-образа
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: go_test_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Сборка через docker compose
+        run: docker compose build
