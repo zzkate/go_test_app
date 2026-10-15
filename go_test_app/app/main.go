@@ -25,6 +25,7 @@ type Waiter struct {
 type Queue struct {
 	mutex   sync.Mutex
 	items   []*QueueMessage
+	head    int
 	waiters []*Waiter
 }
 
@@ -51,11 +52,22 @@ func (q *Queue) Push(msg *QueueMessage) {
 
 func (q *Queue) WaitForNext(timeout time.Duration) *QueueMessage {
 	q.mutex.Lock()
-	if len(q.items) > 0 {
-		msg := q.items[0]
-		q.items = q.items[1:]
+	if q.head < len(q.items) {
+		msg := q.items[q.head]
+		q.items[q.head] = nil // не держим ссылку на отданное сообщение
+		q.head++
+		if q.head == len(q.items) {
+			q.items = q.items[:0] // переиспользуем массив вместо роста с нуля
+			q.head = 0
+		}
 		q.mutex.Unlock()
 		return msg
+	}
+	// Без таймаута не ждём: очередь пуста — сразу отдаём 404,
+	// не создавая waiter и таймер.
+	if timeout <= 0 {
+		q.mutex.Unlock()
+		return nil
 	}
 
 	ch := make(chan *QueueMessage, 1)
@@ -63,10 +75,13 @@ func (q *Queue) WaitForNext(timeout time.Duration) *QueueMessage {
 	q.waiters = append(q.waiters, waiter)
 	q.mutex.Unlock()
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	select {
 	case msg := <-ch:
 		return msg
-	case <-time.After(timeout):
+	case <-timer.C:
 		q.mutex.Lock()
 		// Убираем себя из waiters, если Push ещё не забрал нас.
 		found := false
