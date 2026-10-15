@@ -15,7 +15,7 @@ COPY . .
 # Шаг 3: Собираем бинарник
 # CGO_ENABLED=0 - критически важно для статической линковки
 # -ldflags="-w -s" - вырезаем отладочную информацию
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/service ./app/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/service ./app
 
 # === Этап 2: Финальный образ (Runner) ===
 FROM alpine:latest
